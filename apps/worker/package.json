@@ -1,0 +1,27 @@
+{
+  "name": "@papertrail/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc --project tsconfig.json",
+    "start": "tsx src/main.ts",
+    "smoke:openai": "tsx src/openai-smoke.ts",
+    "check": "tsc --project tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@papertrail/ai": "workspace:*",
+    "@papertrail/contracts": "workspace:*",
+    "@papertrail/db": "workspace:*",
+    "@papertrail/domain": "workspace:*",
+    "@supabase/supabase-js": "2.116.0",
+    "dotenv": "18.0.1",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "tsx": "4.23.13",
+    "vitest": "5.0.1"
+  }
+}

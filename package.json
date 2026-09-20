@@ -1,0 +1,28 @@
+{
+  "name": "papertrail",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A maintained application workspace with evidence, RuleDiff, and approval-safe external actions.",
+  "packageManager": "pnpm@10.27.0",
+  "engines": {
+    "node": ">=22.0.0 <25.0.0",
+    "pnpm": ">=10.0.0 <11.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --if-present run build",
+    "check": "pnpm -r --if-present run check",
+    "test": "pnpm test:unit",
+    "test:unit": "pnpm -r --if-present run test",
+    "test:integration": "node scripts/test-w1-foundation.mjs",
+    "test:e2e": "node scripts/not-ready.mjs e2e",
+    "dev": "pnpm --filter @papertrail/web dev",
+    "healthcheck": "node scripts/not-ready.mjs healthcheck",
+    "fixtures:generate": "node scripts/not-ready.mjs fixtures:generate",
+    "demo:reset": "node scripts/not-ready.mjs demo:reset"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.2",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "source": "https://developers.openai.com/api/docs/pricing",
+  "verifiedAt": "2026-09-20",
+  "scope": "Standard short-context USD per 1M tokens; verify account access separately before a live call.",
+  "models": {
+    "gpt-5.6-luna": { "inputNanoPerToken": 200, "cachedInputNanoPerToken": 20, "cacheWriteNanoPerToken": 250, "outputNanoPerToken": 1200 },
+    "gpt-5.6-terra": { "inputNanoPerToken": 2000, "cachedInputNanoPerToken": 200, "cacheWriteNanoPerToken": 2500, "outputNanoPerToken": 12000 },
+    "gpt-6-astra": { "inputNanoPerToken": 10000, "cachedInputNanoPerToken": 1000, "cacheWriteNanoPerToken": 12500, "outputNanoPerToken": 50000 }
+  }
+}
+

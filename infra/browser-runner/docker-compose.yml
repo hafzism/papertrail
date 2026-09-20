@@ -1,0 +1,18 @@
+services:
+  browser-gateway:
+    build:
+      context: ../..
+      dockerfile: apps/browser-gateway/Dockerfile
+    environment:
+      # Startup validates these; optional interpolation keeps `docker compose build`
+      # usable before a developer has created their private local .env values.
+      BROWSER_GATEWAY_SECRET: ${BROWSER_GATEWAY_SECRET:-}
+      BROWSER_ALLOWED_ORIGINS: ${BROWSER_ALLOWED_ORIGINS:-}
+      BROWSER_GATEWAY_PUBLIC_ORIGIN: ${BROWSER_GATEWAY_PUBLIC_ORIGIN:-http://localhost:3002}
+      BROWSER_GATEWAY_PORT: 3002
+      BROWSER_MAX_SESSION_MINUTES: ${BROWSER_MAX_SESSION_MINUTES:-20}
+      BROWSER_IDLE_MINUTES: ${BROWSER_IDLE_MINUTES:-3}
+    ports:
+      - "127.0.0.1:3002:3002"
+    init: true
+    restart: unless-stopped

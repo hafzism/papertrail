@@ -1,0 +1,14 @@
+node_modules/
+.next/
+dist/
+*.tsbuildinfo
+coverage/
+.env
+.env.local
+.env.*.local
+!.env.example
+*.log
+playwright-report/
+test-results/
+supabase/.temp/
+tmp/
