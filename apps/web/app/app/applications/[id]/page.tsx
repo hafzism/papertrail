@@ -36,7 +36,7 @@ export default async function ApplicationPage({ params }: ApplicationPageProps) 
 
   const { data: application, error } = await supabase
     .from("applications")
-    .select("id, title, lifecycle_state, readiness_state, monitoring_enabled, created_at, program_cycles(cycle_label, programs(name, institutions(name))), tracked_activities(id, title), followup_actions(id, kind, state)")
+    .select("id, title, lifecycle_state, readiness_state, monitoring_enabled, created_at, program_cycles(cycle_label, programs(name, institutions(name))), tracked_activities!applications_activity_owner_fk(id, title), followup_actions!applications_followup_action_owner_fk(id, kind, state)")
     .eq("id", id)
     .maybeSingle();
   if (error || application === null) notFound();
