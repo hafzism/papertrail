@@ -88,34 +88,31 @@ export default async function VaultPage({ searchParams }: VaultPageProps) {
   const params = await searchParams;
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-5xl px-5 py-10 sm:px-8">
+    <main className="mx-auto min-h-screen w-full max-w-6xl px-5 py-10 sm:px-8">
       <a className="font-semibold text-[var(--navy)] underline underline-offset-4" href="/app">Back to workspace</a>
-      <p className="mt-8 text-sm font-semibold uppercase tracking-[0.15em] text-[var(--navy)]">Private vault</p>
-      <h1 className="mt-3 text-4xl font-bold tracking-tight">Evidence you control</h1>
-      <p className="mt-4 max-w-2xl leading-7 text-[var(--slate)]">Each upload creates a private immutable version and queues evidence extraction. The source file is never turned into a public notice.</p>
-      {params.uploaded === "1" ? <p className="mt-6 rounded-md bg-emerald-50 p-3 text-sm text-emerald-900" role="status">Document received. Extraction is queued and no fact has been treated as confirmed.</p> : null}
+      <div className="mt-8 border-b border-[var(--pt-rule)] pb-6"><p className="pt-eyebrow">System record classification · vault archive</p><div className="flex flex-wrap items-end justify-between gap-5"><div><h1 className="text-4xl font-semibold tracking-tight">Evidence you control</h1><p className="mt-3 max-w-2xl leading-7 text-[var(--slate)]">Each upload creates a private immutable version and queues evidence extraction. The source file is never turned into a public notice.</p></div><span className="pt-stamp">Immutable record active</span></div></div>
+      {params.uploaded === "1" ? <p className="pt-alert mt-6" role="status">Document received. Extraction is queued and no fact has been treated as confirmed.</p> : null}
 
-      <section className="mt-8 rounded-xl border border-[var(--border)] bg-white p-6 shadow-sm" aria-labelledby="add-document-title">
-        <h2 className="text-2xl font-bold" id="add-document-title">Add a document</h2>
+      <div className="mt-10 grid items-start gap-8 lg:grid-cols-[24rem_minmax(0,1fr)]"><section className="border border-[var(--pt-rule)] bg-white p-6 shadow-none" aria-labelledby="add-document-title">
+        <div className="flex items-center justify-between border-b border-[var(--pt-rule)] pb-4"><h2 className="text-xl font-semibold" id="add-document-title">Add a document</h2><span className="pt-stamp">Intake form</span></div>
         <VaultUpload />
       </section>
 
-      <section className="mt-8" aria-labelledby="documents-title">
-        <h2 className="text-2xl font-bold" id="documents-title">Your documents</h2>
+      <section aria-labelledby="documents-title">
+        <div className="pt-section-heading"><div><h2 id="documents-title">Your documents</h2><span className="pt-stamp">{documents?.length ?? 0} active records</span></div><span>Private evidence index</span></div>
         {error ? <p className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-800" role="alert">Documents could not be loaded. Refresh the page or check the configured project.</p> : null}
         {!error && documents?.length === 0 ? <p className="mt-4 text-[var(--slate)]">No documents have been added yet.</p> : null}
         <ul className="mt-4 grid gap-3">
           {documents?.map((document) => (
-            <li className="rounded-lg border border-[var(--border)] bg-white p-4" key={document.id}>
+            <li className="overflow-hidden rounded-none border border-[var(--pt-rule)] bg-white p-0" key={document.id}>
               {(() => {
                 const extraction = document.latest_version_id ? extractionByVersion.get(document.latest_version_id) : undefined;
                 const version = document.latest_version_id ? versionsById.get(document.latest_version_id) : undefined;
                 const formInspection = document.latest_version_id ? formInspectionByVersion.get(document.latest_version_id) : undefined;
                 const flags = Array.isArray(extraction?.uncertainty_flags) ? extraction.uncertainty_flags.filter((flag): flag is string => typeof flag === "string") : [];
                 return <>
-              <p className="font-semibold">{document.label}</p>
-              <p className="mt-1 text-sm text-[var(--slate)]">{document.document_type ?? "Unclassified document"}</p>
-              <p className="mt-2 text-sm text-[var(--slate)]">
+              <div className="border-b border-[var(--pt-rule)] bg-[var(--pt-muted)] px-4 py-2"><span className="pt-stamp">Docket record</span></div><div className="p-4"><p className="font-semibold">{document.label}</p>
+              <p className="mt-1 text-sm text-[var(--slate)]">{document.document_type ?? "Unclassified document"}</p><p className="mt-2 text-sm text-[var(--slate)]">
                 Extraction: {document.latest_version_id ? (extractionStates.get(document.latest_version_id) ?? "status unavailable") : "not queued"}
               </p>
               {extraction?.page_count ? <p className="mt-1 text-sm text-[var(--slate)]">Pages detected: {extraction.page_count}</p> : null}
@@ -125,12 +122,13 @@ export default async function VaultPage({ searchParams }: VaultPageProps) {
               {document.latest_version_id && version?.mime_type === "application/pdf" ? <InspectForm documentVersionId={document.latest_version_id} inspection={formInspection} mappings={formInspection ? (mappingsByInspection.get(formInspection.id) ?? []) : []} profileFacts={profileFacts} applications={preparableApplications ?? []} /> : null}
               {document.latest_version_id && version ? <DownloadDocument filename={version.original_filename} objectPath={version.object_path} /> : null}
               <RemoveDocument documentId={document.id} label={document.label} />
+              </div>
                 </>;
               })()}
             </li>
           ))}
         </ul>
-      </section>
+      </section></div>
     </main>
   );
 }
