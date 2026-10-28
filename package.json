@@ -14,11 +14,12 @@
     "test": "pnpm test:unit",
     "test:unit": "pnpm -r --if-present run test",
     "test:integration": "node scripts/test-w1-foundation.mjs",
-    "test:e2e": "node scripts/not-ready.mjs e2e",
+    "test:e2e": "pnpm --filter @papertrail/worker exec tsx src/browser-product-smoke.ts",
+    "test:product": "pnpm --filter @papertrail/worker exec tsx src/product-smoke.ts",
+    "dev:portal": "pnpm --filter @papertrail/reference-portal start",
     "dev": "pnpm --filter @papertrail/web dev",
-    "healthcheck": "node scripts/not-ready.mjs healthcheck",
-    "fixtures:generate": "node scripts/not-ready.mjs fixtures:generate",
-    "demo:reset": "node scripts/not-ready.mjs demo:reset"
+    "healthcheck": "node scripts/healthcheck.mjs",
+    "fixtures:generate": "node scripts/generate-papertrail-fixture-pdfs.mjs"
   },
   "devDependencies": {
     "@types/node": "26.6.2",

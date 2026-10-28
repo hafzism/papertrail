@@ -85,7 +85,7 @@ See [setup requirements](docs/setup/SETUP_REQUIRED.md) for the local environment
 
 ## Additional Notes
 
-Hackathon build status: complete.
+The working build includes the private evidence workflow, BYOK assistant, scoped follow-up actions and real browser demonstrations. The complete original product remains in implementation; verified behavior and remaining work are tracked in [the completion audit](docs/COMPLETION_AUDIT.md).
 
 PaperTrail is intentionally private and owner-controlled. Extracted content, AI proposals, activity records, and external-action review artifacts remain review material; they do not represent institutional verification, eligibility decisions, or permission to submit.
 

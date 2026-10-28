@@ -10,6 +10,7 @@ export interface GatewayConfig {
   readonly vncPort: number;
   readonly maxSessionMinutes: number;
   readonly idleMinutes: number;
+  readonly headless: boolean;
 }
 
 function positiveInteger(value: string | undefined, fallback: number, name: string): number {
@@ -53,6 +54,7 @@ export function loadGatewayConfig(env: NodeJS.ProcessEnv = process.env): Gateway
     vncPort: positiveInteger(env.BROWSER_VNC_PORT, 5900, "BROWSER_VNC_PORT"),
     maxSessionMinutes: positiveInteger(env.BROWSER_MAX_SESSION_MINUTES, 20, "BROWSER_MAX_SESSION_MINUTES"),
     idleMinutes: positiveInteger(env.BROWSER_IDLE_MINUTES, 3, "BROWSER_IDLE_MINUTES"),
+    headless: env.BROWSER_HEADLESS === "true",
   };
 }
 

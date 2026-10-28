@@ -5,11 +5,13 @@ import { useState } from "react";
 export function ReferencePortalForm() {
   const [submitted, setSubmitted] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function submit(formData: FormData): void {
     const name = String(formData.get("name") ?? "").trim();
     const applicantType = String(formData.get("applicantType") ?? "").trim();
-    if (!name || !applicantType) return;
+    setError(null);
+    if (!name || !["student", "community-member"].includes(applicantType) || formData.get("declaration") !== "on") { setError("Enter a name, choose an applicant type and confirm the fictional demo declaration."); return; }
     const nextReference = `DEMO-${new Date().getUTCFullYear()}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     sessionStorage.setItem("papertrail-reference-portal-receipt", JSON.stringify({ name, applicantType, reference: nextReference, createdAt: new Date().toISOString() }));
     setReference(nextReference);
@@ -31,6 +33,7 @@ export function ReferencePortalForm() {
       <input className="mt-1 size-4 accent-[var(--navy)]" id="reference-declaration" name="declaration" required type="checkbox" />
       I understand this is a fictional reference portal and am using test data only.
     </label>
+    {error ? <p className="text-sm text-red-800" role="alert">{error}</p> : null}
     <button className="min-h-11 w-fit cursor-pointer rounded-md bg-[var(--navy)] px-5 py-3 font-semibold text-white transition-colors duration-200 hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--navy)]" type="submit">Create demo acknowledgement</button>
     {submitted && reference ? <p className="rounded-md bg-emerald-50 p-3 text-sm leading-6 text-emerald-900" role="status">Demo acknowledgement recorded in this browser only. Reference: <span className="font-mono font-semibold">{reference}</span></p> : null}
   </form>;

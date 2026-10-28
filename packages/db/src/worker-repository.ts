@@ -143,6 +143,24 @@ export type FinishableJobState = "succeeded" | "failed" | "awaiting_user" | "awa
 export class WorkerRepository {
   constructor(private readonly sql: SqlExecutor) {}
 
+  async enqueueDueFollowupReminders(): Promise<number> {
+    const rows=await this.sql.unsafe<Array<{queued:number}>>("select public.enqueue_due_followup_reminders() as queued",[]);return rows[0]?.queued??0;
+  }
+
+  async beginVoiceProviderClose(job: ClaimedJob): Promise<{provider_call_id:string;key_ciphertext:string;session_id:string}|null> {
+    const rows=await this.sql.unsafe<Array<{provider_call_id:string;key_ciphertext:string;session_id:string}>>("select * from public.begin_voice_provider_close($1::uuid,$2::bigint)",[job.id,job.fencing_token]);
+    return rows[0]??null;
+  }
+  async finishVoiceProviderClose(job: ClaimedJob): Promise<boolean> {
+    const rows=await this.sql.unsafe<Array<{closed:boolean}>>("select public.finish_voice_provider_close($1::uuid,$2::bigint) as closed",[job.id,job.fencing_token]);return rows[0]?.closed===true;
+  }
+
+  async telegramIntakeAction<T = Record<string, unknown>>(job: ClaimedJob, action: string, args: Record<string, unknown> = {}): Promise<T> {
+    const rows = await this.sql.unsafe<{ result: T }[]>("select public.telegram_intake_action($1::uuid,$2::bigint,$3::text,$4::text::jsonb) as result", [job.id, job.fencing_token, action, JSON.stringify(args)]);
+    if (!rows[0]) throw new Error("TELEGRAM_INTAKE_FENCE_REJECTED");
+    return rows[0].result;
+  }
+
   async claimNext(leaseSeconds = 90): Promise<ClaimedJob | null> {
     const rows = await this.sql.unsafe<ClaimedJob[]>("select * from public.claim_next_job($1)", [leaseSeconds]);
     return rows[0] ?? null;

@@ -12,6 +12,8 @@ import { InspectAcroFormHandler } from "./inspect-acroform.js";
 import { PrepareAcroFormDerivativeHandler } from "./prepare-acroform-derivative.js";
 import { MonitorPublishedSourceHandler } from "./monitor-published-source.js";
 import { DeliverTelegramNotificationHandler } from "./deliver-telegram-notification.js";
+import { ProcessTelegramIntakeHandler } from "./process-telegram-intake.js";
+import { CloseVoiceSessionHandler } from "./close-voice-session.js";
 
 loadDotenv({ path: resolve(import.meta.dirname, "../../..", ".env"), quiet: true });
 
@@ -72,9 +74,10 @@ async function main(): Promise<void> {
   };
   const repository = new WorkerRepository(executor);
   const enabledKinds = parseSupportedKinds();
-  const handlers: JobHandler[] = [];
+  const handlers: JobHandler[] = [new CloseVoiceSessionHandler(repository)];
   const requiresStorage = enabledKinds.includes("extract_document") || enabledKinds.includes("capture_public_source") || enabledKinds.includes("prepare_packet_manifest") || enabledKinds.includes("inspect_acroform") || enabledKinds.includes("prepare_filled_acroform");
-  const storage = requiresStorage ? createWorkerStorageClient() : null;
+  const storage = requiresStorage || enabledKinds.includes("process_telegram_intake") ? createWorkerStorageClient() : null;
+  if (enabledKinds.includes("process_telegram_intake") && storage) handlers.push(new ProcessTelegramIntakeHandler(repository,storage));
   if (enabledKinds.includes("extract_document") && storage) handlers.push(new ExtractDocumentHandler(repository, storage));
   if (enabledKinds.includes("capture_public_source") && storage) handlers.push(new CapturePublicSourceHandler(repository, storage));
   if (enabledKinds.includes("prepare_packet_manifest") && storage) handlers.push(new PreparePacketManifestHandler(repository, storage));
@@ -94,6 +97,7 @@ async function main(): Promise<void> {
 
   let stopping = false;
   let lastSourceSweepAt = 0;
+  let lastReminderSweepAt = 0;
   const sourceSweepEnabled = enabledKinds.includes("monitor_published_source");
   const sourceCheckIntervalMinutes = parsePositiveInteger(process.env.SOURCE_CHECK_INTERVAL_MINUTES, 60);
   const sourceCheckLimit = Math.min(parsePositiveInteger(process.env.SOURCE_MAX_ACTIVE, 20), 100);
@@ -101,8 +105,19 @@ async function main(): Promise<void> {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
   logger.info("worker.started", { workerId, enabledKinds: handlers.flatMap((handler) => handler.supportedKinds) });
+  // Voice deadlines must not wait behind a long OCR or PDF generation task.
+  const voiceCloser = new DurableWorker(repository,new CloseVoiceSessionHandler(repository),`${workerId}-voice`,logger);
+  let voiceClosing:Promise<boolean>|null=null;
+  const voiceWatchdog=setInterval(()=>{
+    if(stopping||voiceClosing)return;
+    voiceClosing=voiceCloser.processOne().catch(()=>{logger.error("worker.voice_watchdog_failed");return false;}).finally(()=>{voiceClosing=null;});
+  },5000);
 
   while (!stopping) {
+    if(Date.now()-lastReminderSweepAt>=60_000){
+      lastReminderSweepAt=Date.now();
+      try{const queued=await repository.enqueueDueFollowupReminders();if(queued)logger.info("worker.followup_reminders_queued",{queued});}catch{logger.error("worker.followup_reminder_sweep_failed");}
+    }
     if (sourceSweepEnabled && Date.now() - lastSourceSweepAt >= sourceSweepEveryMs) {
       lastSourceSweepAt = Date.now();
       try {
@@ -115,6 +130,8 @@ async function main(): Promise<void> {
     const processed = await worker.processOne();
     if (!processed) await new Promise((resolve) => setTimeout(resolve, idleDelayMs));
   }
+  clearInterval(voiceWatchdog);
+  if(voiceClosing)await voiceClosing;
   await sql.end({ timeout: 5 });
   logger.info("worker.stopped", { workerId });
 }

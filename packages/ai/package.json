@@ -4,7 +4,12 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./assistant": "./src/assistant.ts",
+    "./audio": "./src/audio.ts"
+  },
+  "dependencies": {
+    "music-metadata": "12.3.2"
   },
   "scripts": {
     "build": "tsc --project tsconfig.json",

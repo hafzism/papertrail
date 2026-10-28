@@ -1,0 +1,6 @@
+export const voiceTools = [
+  { type: "function", name: "get_application_state", description: "Read the latest requirements, sources, facts and evidence for this application. Use before answering specific questions.", parameters: { type: "object", properties: {}, additionalProperties: false } },
+  { type: "function", name: "prepare_packet", description: "Queue a private review packet only when the owner explicitly requests preparation. Never submits externally.", parameters: { type: "object", properties: {}, additionalProperties: false } },
+  { type: "function", name: "analyze_source", description: "Queue cited requirement suggestions for an owner-selected unresolved text source, only on explicit request.", parameters: { type: "object", properties: { sourceId: { type: "string" } }, required: ["sourceId"], additionalProperties: false } },
+  { type: "function", name: "save_application_note", description: "Save the owner's exact requested note or correction for web review. This does not confirm a fact or change evidence. Read important numbers and dates back first.", parameters: { type: "object", properties: { text: { type: "string", maxLength: 4000 } }, required: ["text"], additionalProperties: false } },
+];

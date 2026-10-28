@@ -1,4 +1,14 @@
 services:
+  reference-portal:
+    build:
+      context: ../..
+      dockerfile: apps/reference-portal/Dockerfile
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - reference-portal-data:/data
+    init: true
+    restart: unless-stopped
   browser-gateway:
     build:
       context: ../..
@@ -7,7 +17,7 @@ services:
       # Startup validates these; optional interpolation keeps `docker compose build`
       # usable before a developer has created their private local .env values.
       BROWSER_GATEWAY_SECRET: ${BROWSER_GATEWAY_SECRET:-}
-      BROWSER_ALLOWED_ORIGINS: ${BROWSER_ALLOWED_ORIGINS:-}
+      BROWSER_ALLOWED_ORIGINS: ${BROWSER_ALLOWED_ORIGINS:-http://reference-portal:3001}
       BROWSER_GATEWAY_PUBLIC_ORIGIN: ${BROWSER_GATEWAY_PUBLIC_ORIGIN:-http://localhost:3002}
       BROWSER_GATEWAY_PORT: 3002
       BROWSER_MAX_SESSION_MINUTES: ${BROWSER_MAX_SESSION_MINUTES:-20}
@@ -16,3 +26,8 @@ services:
       - "127.0.0.1:3002:3002"
     init: true
     restart: unless-stopped
+    depends_on:
+      - reference-portal
+
+volumes:
+  reference-portal-data:

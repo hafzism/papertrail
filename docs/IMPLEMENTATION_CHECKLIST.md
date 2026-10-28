@@ -10,7 +10,7 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` not started, `[!]` requi
 | W2 | Evidence: vault, extraction, confirmation, cited requirements/checklist | [~] | Actual notice + document produce reviewed state |
 | W3 | Artifacts: AcroForm/static overlays, transforms, manifest/ZIP | [~] | English/Malayalam PDF visual evidence |
 | W4 | Change engine: RuleDiff, dependency graph, repair, correction | [~] | Targeted stale/rebuild + immutable submission tests |
-| W5 | Browser + COMMIT: gateway, portal, approval, reconciliation | [ ] | Takeover + timeout exactly-once submission |
+| W5 | Browser + COMMIT: gateway, portal, approval, reconciliation | [~] | Real three-workflow execution and timeout exactly-once smoke pass; interactive takeover/policy races remain |
 | W6 | Shared notices: proposals, moderation, monitoring, fan-out | [~] | Moderated proposals, bounded periodic source watch, approved revision records, and opted-in application fan-out exist; full verified notice interpretation remains |
 | W7 | Channels: Telegram, reminders, live/recorded voice | [~] | Secure Telegram linking/durable alert delivery and owner-bound live WebRTC session control exist; real Telegram and live-voice smoke evidence remains |
 | W7b | General follow-up continuity: activity confirmation/consent, scoped actions, guided linked applications | [~] | Owner-controlled activity/action/linked-draft flow exists; A45–A52 across education and non-education fixtures remain |
@@ -47,7 +47,7 @@ Status legend: `[x]` complete, `[~]` in progress, `[ ]` not started, `[!]` requi
 - [~] A18 SQL job claiming and stale-fence rejection are tested locally; execution dispatch remains
 - [ ] A19 Changed payload invalidates approval
 - [ ] A20 Publication/dispatch race is detected
-- [ ] A21 Timeout-after-acceptance reconciles one submission
+- [x] A21 Timeout-after-acceptance reconciles one submission: actual web/gateway/independent-portal smoke verifies count increases exactly once
 - [ ] A22 Crash after dispatch intent never blind-retries
 - [ ] A25 Browser session/ticket is owner-bound and cleaned
 - [ ] A26 Client cannot gain control by changing `viewOnly`

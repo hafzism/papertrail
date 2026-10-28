@@ -16,13 +16,14 @@ export class GeminiGenerateContentTransport {
 
   async create(request: ProviderTextRequest): Promise<ProviderTextResponse> {
     if (!modelPattern.test(request.model)) throw new Error("GEMINI_MODEL_INVALID");
-    const response = await this.fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(request.model)}:generateContent?key=${encodeURIComponent(this.apiKey)}`, {
+    const response = await this.fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(request.model)}:generateContent`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-goog-api-key": this.apiKey },
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: request.instructions }] },
         contents: [{ role: "user", parts: [{ text: request.input }] }],
-        generationConfig: { maxOutputTokens: request.maxOutputTokens, responseMimeType: "application/json" },
+        generationConfig: { maxOutputTokens: request.maxOutputTokens, responseMimeType: "application/json", ...(/^gemini-2\.5-flash/.test(request.model) ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
       }),
     });
     if (!response.ok) throw new Error(`GEMINI_GENERATE_CONTENT_HTTP_${response.status}`);

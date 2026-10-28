@@ -1,0 +1,8 @@
+{
+  "name": "@papertrail/reference-portal",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": { "start": "tsx src/server.ts", "build": "tsc --project tsconfig.json", "check": "tsc --project tsconfig.json --noEmit" },
+  "devDependencies": { "tsx": "4.23.13" }
+}

@@ -18,6 +18,8 @@ import { ApplicationNoteForm } from "./application-note-form";
 import { CreateReferencePortalChangeset } from "./create-reference-portal-changeset";
 import { PacketExportDownload } from "./packet-export-download";
 import { LiveVoicePanel } from "./live-voice-panel";
+import { ApplicationAssistant } from "./application-assistant";
+import { ProcessingRefresh } from "../../processing-refresh";
 
 interface ApplicationPageProps {
   params: Promise<{ id: string }>;
@@ -39,7 +41,8 @@ export default async function ApplicationPage({ params }: ApplicationPageProps) 
   const { data: aiProviderRows } = await supabase.rpc("owner_ai_provider_credential_status");
   const savedAiProvider = Array.isArray(aiProviderRows) ? aiProviderRows[0] : null;
   const hasOwnerOpenAiProvider = savedAiProvider?.provider === "openai";
-  const liveVoiceEnabled = hasOwnerOpenAiProvider || Boolean(process.env.OPENAI_API_KEY?.trim());
+  const liveVoiceEnabled = savedAiProvider ? hasOwnerOpenAiProvider : Boolean(process.env.OPENAI_API_KEY?.trim());
+  const { data: assistantTurns } = await supabase.from("application_assistant_turns").select("id,message,reply,state").eq("application_id", id).order("created_at", { ascending: false }).limit(12);
 
   const { data: application, error } = await supabase
     .from("applications")
@@ -174,10 +177,12 @@ export default async function ApplicationPage({ params }: ApplicationPageProps) 
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-5 py-10 sm:px-8">
+      <ProcessingRefresh active={[...(proposalRuns ?? []), ...(packetManifestRuns ?? []), ...(filledAcroFormRuns ?? [])].some(run => ["queued","running"].includes(run.state))} />
       <a className="font-semibold text-[var(--navy)] underline underline-offset-4" href="/app">Back to workspace</a>
       <section className="mt-6 border border-[var(--pt-rule)] bg-white p-6 shadow-none"><div className="flex flex-wrap items-start justify-between gap-5 border-b border-[var(--pt-rule)] pb-5"><div><p className="pt-eyebrow">Private draft casefile</p><h1 className="text-4xl font-semibold tracking-tight">{application.title}</h1><p className="mt-3 leading-7 text-[var(--slate)]">Lifecycle: {application.lifecycle_state.replaceAll("_", " ")} · Readiness: {application.readiness_state.replaceAll("_", " ")} · Not an official submission</p></div><div className="border border-[var(--pt-rule)] bg-[var(--pt-muted)] p-3"><p className="pt-eyebrow">Casefile reference</p><p className="font-mono text-xs">{application.id}</p></div></div><dl className="mt-5 grid gap-4 sm:grid-cols-3"><div><dt className="pt-eyebrow">Created</dt><dd className="font-mono text-xs">{new Date(application.created_at).toLocaleString()}</dd></div><div><dt className="pt-eyebrow">Source record</dt><dd className="text-sm">{applicationCycle ? `${applicationInstitution?.name ?? "Institution"} · ${applicationProgram?.name ?? "Program"}` : "Private one-off draft"}</dd></div><div><dt className="pt-eyebrow">Monitoring</dt><dd className="text-sm">{application.monitoring_enabled ? "Owner opted in" : "Not enabled"}</dd></div></dl></section>
       {linkedActivity ? <p className="mt-2 rounded-md bg-slate-50 p-3 text-sm leading-6 text-[var(--slate)]">This is a follow-up draft linked to <a className="font-semibold text-[var(--navy)] underline underline-offset-4" href={`/app/activities/${linkedActivity.id}`}>{linkedActivity.title}</a>{linkedFollowupAction ? ` · action: ${linkedFollowupAction.kind} (${linkedFollowupAction.state.replaceAll("_", " ")})` : ""}. It is a separate draft and does not alter the original activity or application record.</p> : null}
       <LiveVoicePanel applicationId={application.id} enabled={liveVoiceEnabled} />
+      <ApplicationAssistant applicationId={application.id} initialTurns={[...(assistantTurns ?? [])].reverse()} />
       <section className="mt-10 rounded-xl border border-[var(--border)] bg-white p-6 shadow-sm" aria-labelledby="application-notes-title"><h2 className="text-2xl font-bold" id="application-notes-title">Private application conversation</h2><p className="mt-3 leading-7 text-[var(--slate)]">Keep decisions and follow-ups with this draft. PaperTrail does not invent a response or send these notes anywhere.</p><ApplicationNoteForm applicationId={application.id} />{applicationNotes?.length === 0 ? <p className="mt-5 text-sm text-[var(--slate)]">No private notes yet.</p> : <ul className="mt-5 grid gap-3">{applicationNotes?.map((note) => <li className="rounded-md bg-slate-50 p-4" key={note.id}><p className="whitespace-pre-wrap leading-7">{note.body}</p><p className="mt-2 text-xs text-[var(--slate)]">{new Date(note.created_at).toLocaleString()}</p></li>)}</ul>}</section>
 
       <section className="mt-8 rounded-xl border border-[var(--border)] bg-white p-6" aria-labelledby="next-title">
@@ -325,7 +330,7 @@ export default async function ApplicationPage({ params }: ApplicationPageProps) 
       <section className="mt-8 rounded-xl border border-[var(--border)] bg-white p-6" aria-labelledby="reference-demo-title">
         <h2 className="text-2xl font-bold" id="reference-demo-title">Fictional reference portal demo</h2>
         <p className="mt-3 leading-7 text-[var(--slate)]">This is the working, labelled local demonstration route. It uses harmless test data, an immutable changeset, and explicit owner approval before recording a browser-local fictional acknowledgement. It never contacts an institution or changes this application's real submission state.</p>
-        {application.lifecycle_state === "draft" || application.lifecycle_state === "prepared" ? <CreateReferencePortalChangeset applicationId={application.id} /> : null}
+        {application.lifecycle_state === "draft" || application.lifecycle_state === "prepared" ? <CreateReferencePortalChangeset applicationId={application.id} documents={completedDocumentVersions ?? []} /> : null}
         {referenceReceipts?.length === 0 ? <p className="mt-5 text-sm text-[var(--slate)]">No fictional portal acknowledgement has been recorded.</p> : <ul className="mt-5 grid gap-3">{referenceReceipts?.map((receipt) => <li className="rounded-md bg-emerald-50 p-4 text-sm text-emerald-950" key={receipt.id}><p className="font-semibold">Fictional acknowledgement: <span className="font-mono">{receipt.reference_code}</span></p><p className="mt-1">Recorded {new Date(receipt.created_at).toLocaleString()} · exact payload SHA-256 {receipt.payload_sha256}</p></li>)}</ul>}
       </section>
 

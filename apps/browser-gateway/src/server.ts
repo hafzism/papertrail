@@ -3,6 +3,7 @@ import { Socket } from "node:net";
 import { connect } from "node:net";
 import { join, normalize } from "node:path";
 import { createReadStream, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { hasGatewaySecret, isAllowedDestination, loadGatewayConfig } from "./config.js";
 import { BrowserSessionManager, type ApprovedDemoAction } from "./session-manager.js";
@@ -32,9 +33,11 @@ function isInternalRequest(request: IncomingMessage): boolean {
 
 async function readJson(request: IncomingMessage): Promise<CreateSessionBody> {
   const chunks: Buffer[] = [];
+  let size = 0;
   for await (const chunk of request) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    if (Buffer.concat(chunks).byteLength > 16_384) throw new Error("REQUEST_TOO_LARGE");
+    size += chunks.at(-1)!.byteLength;
+    if (size > 30 * 1024 * 1024) throw new Error("REQUEST_TOO_LARGE");
   }
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")) as CreateSessionBody; } catch { throw new Error("INVALID_JSON"); }
 }
@@ -52,7 +55,18 @@ function approvedDemoAction(value: unknown): ApprovedDemoAction | null {
   const applicantType = action.applicantType === "student" || action.applicantType === "community-member" ? action.applicantType : null;
   const payloadSha256 = typeof action.payloadSha256 === "string" && /^[a-f0-9]{64}$/i.test(action.payloadSha256) ? action.payloadSha256 : null;
   if (!actionId || !applicantName || !applicantType || !payloadSha256 || action.kind !== "reference_portal_acknowledgement" || action.declarationAccepted !== true) return null;
-  return { actionId, applicantName, applicantType, payloadSha256, kind: "reference_portal_acknowledgement", declarationAccepted: true };
+  const fields = action.portalFields;
+  if (!fields || typeof fields !== "object" || Array.isArray(fields) || Object.entries(fields).some(([key,value]) => !["name","applicantType","kind","session","centre","course","location"].includes(key) || typeof value !== "string" || value.length > 200)) return null;
+  if (!Array.isArray(action.attachments) || action.attachments.length < 1 || action.attachments.length > 20) return null;
+  let total=0;
+  const attachments: NonNullable<ApprovedDemoAction["attachments"]>[number][]=[];
+  for (const item of action.attachments) {
+    if (!item || typeof item.filename!=="string" || item.filename.length>255 || typeof item.mimeType!=="string" || !["application/pdf","image/png","image/jpeg","image/webp"].includes(item.mimeType) || typeof item.bytesBase64!=="string" || typeof item.sha256!=="string") return null;
+    const bytes=Buffer.from(item.bytesBase64,"base64"); total+=bytes.byteLength;
+    if(!bytes.length || total>20*1024*1024 || createHash("sha256").update(bytes).digest("hex")!==item.sha256) return null;
+    attachments.push({filename:item.filename,mimeType:item.mimeType,sha256:item.sha256,bytesBase64:item.bytesBase64});
+  }
+  return { actionId, applicantName, applicantType, payloadSha256, kind: "reference_portal_acknowledgement", declarationAccepted: true, portalFields: fields as Record<string,string>, attachments };
 }
 
 function parsePath(request: IncomingMessage): string {
@@ -107,7 +121,7 @@ const server = createServer(async (request, response) => {
       if (!ownerId || !applicationId || !runId || !destination || !isAllowedDestination(destination, config.allowedDestinationOrigins)) return json(response, 400, { error: "INVALID_SESSION_SCOPE_OR_DESTINATION" });
       const action = body.approvedDemoAction === undefined ? undefined : approvedDemoAction(body.approvedDemoAction);
       if (body.approvedDemoAction !== undefined && !action) return json(response, 400, { error: "INVALID_APPROVED_DEMO_ACTION" });
-      if (action && new URL(destination).pathname !== "/reference-portal") return json(response, 400, { error: "DEMO_ACTION_DESTINATION_INVALID" });
+      if (action && !/^\/apply\/(grant|exam|renewal)$/.test(new URL(destination).pathname)) return json(response, 400, { error: "DEMO_ACTION_DESTINATION_INVALID" });
       return json(response, 201, { session: await sessions.create({ ownerId, applicationId, runId, destination, ...(action ? { approvedDemoAction: action } : {}) }) });
     } catch (error) { return json(response, error instanceof Error && error.message === "BROWSER_SLOT_BUSY" ? 409 : 422, { error: error instanceof Error ? error.message : "SESSION_CREATE_FAILED" }); }
   }
@@ -117,7 +131,15 @@ const server = createServer(async (request, response) => {
   }
   const ticketId = sessionIdFor(path, "/takeover-ticket");
   if (request.method === "POST" && ticketId) {
-    try { return json(response, 201, { takeover: sessions.issueTakeoverTicket(ticketId) }); } catch (error) { return json(response, 404, { error: error instanceof Error ? error.message : "NOT_FOUND" }); }
+    try { return json(response, 201, { takeover: await sessions.prepareTakeover(ticketId) }); } catch (error) { return json(response, 409, { error: error instanceof Error ? error.message : "NOT_FOUND" }); }
+  }
+  const resumeId = sessionIdFor(path, "/resume");
+  if (request.method === "POST" && resumeId) {
+    try { return json(response,200,await sessions.resume(resumeId)); } catch { return json(response,409,{error:"BROWSER_RESUME_FAILED"}); }
+  }
+  const reconcileId = sessionIdFor(path, "/reconcile");
+  if (request.method === "POST" && reconcileId) {
+    try { return json(response,200,{observation:await sessions.reconcile(reconcileId)}); } catch { return json(response,409,{error:"BROWSER_RECONCILIATION_UNAVAILABLE"}); }
   }
   const executeId = sessionIdFor(path, "/execute");
   if (request.method === "POST" && executeId) {

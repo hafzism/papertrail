@@ -6,6 +6,7 @@ import { RetryExtraction } from "./retry-extraction";
 import { RemoveDocument } from "./remove-document";
 import { InspectForm } from "./inspect-form";
 import { DownloadDocument } from "./download-document";
+import { ProcessingRefresh } from "../processing-refresh";
 
 function describeExtractionFlag(flag: string): string {
   const messages: Record<string, string> = {
@@ -89,6 +90,7 @@ export default async function VaultPage({ searchParams }: VaultPageProps) {
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-6xl px-5 py-10 sm:px-8">
+      <ProcessingRefresh active={Boolean(versions?.some(version => ["pending","processing"].includes(version.extraction_state)) || formInspections?.some(inspection => ["queued","running"].includes(inspection.state)))} />
       <a className="font-semibold text-[var(--navy)] underline underline-offset-4" href="/app">Back to workspace</a>
       <div className="mt-8 border-b border-[var(--pt-rule)] pb-6"><p className="pt-eyebrow">System record classification · vault archive</p><div className="flex flex-wrap items-end justify-between gap-5"><div><h1 className="text-4xl font-semibold tracking-tight">Evidence you control</h1><p className="mt-3 max-w-2xl leading-7 text-[var(--slate)]">Each upload creates a private immutable version and queues evidence extraction. The source file is never turned into a public notice.</p></div><span className="pt-stamp">Immutable record active</span></div></div>
       {params.uploaded === "1" ? <p className="pt-alert mt-6" role="status">Document received. Extraction is queued and no fact has been treated as confirmed.</p> : null}

@@ -8,6 +8,7 @@ loadEnvConfig(resolve(import.meta.dirname, "../.."), true, console, true);
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  transpilePackages: ["@papertrail/ai"],
 };
 
 export default nextConfig;

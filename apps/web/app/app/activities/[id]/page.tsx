@@ -5,6 +5,7 @@ import { ActivityFollowupControls, PrepareFollowupApplication, RecordOwnerFollow
 import { ConfirmCandidateActivity } from "./confirm-candidate-activity";
 import { EndActivity } from "./end-activity";
 import { ResolveFollowupAction } from "./resolve-followup-action";
+import {ActivityNoticeScope}from "./activity-notice-scope";
 
 function formatDate(value: string | null): string {
   return value ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Not recorded";
@@ -18,13 +19,18 @@ export default async function ActivityDetailPage({ params }: { params: Promise<{
   if (!claims) redirect(`/login?next=/app/activities/${id}`);
   const { data: activity } = await supabase
     .from("tracked_activities")
-    .select("id, activity_type, title, scope_json, confirmation_state, tracking_state, created_at, updated_at, expires_at, next_due_at")
+    .select("id, program_id, activity_type, title, scope_json, confirmation_state, tracking_state, created_at, updated_at, expires_at, next_due_at")
     .eq("id", id)
     .maybeSingle();
   if (!activity) notFound();
+  const [{data:programs},{data:rules},{data:coverage}]=await Promise.all([
+    supabase.from("programs").select("id,name").order("name"),
+    supabase.from("published_followup_rules").select("program_id,activity_type,scope_filter"),
+    activity.program_id?supabase.from("published_program_sources").select("id,source_url,last_success_at,monitoring_enabled").eq("program_id",activity.program_id):Promise.resolve({data:[]}),
+  ]);
   const { data: actions } = await supabase
     .from("followup_actions")
-    .select("id, kind, state, applicability_result, deadline_at, deadline_text, linked_application_id")
+    .select("id, kind, state, applicability_result, deadline_at, deadline_text, linked_application_id, cited_reason")
     .eq("activity_id", id)
     .order("deadline_at", { ascending: true, nullsFirst: false });
   const { data: evidence } = await supabase
@@ -44,8 +50,9 @@ export default async function ActivityDetailPage({ params }: { params: Promise<{
       <div><dt className="text-sm font-semibold text-[var(--slate)]">Next due date</dt><dd className="mt-1 font-semibold">{formatDate(activity.next_due_at)}</dd></div>
       <div><dt className="text-sm font-semibold text-[var(--slate)]">Expiry date</dt><dd className="mt-1 font-semibold">{formatDate(activity.expires_at)}</dd></div>
     </dl>
-    <p className="mt-5 rounded-md bg-amber-50 p-4 text-sm leading-6 text-amber-950">No organization or source coverage is connected to this record yet, so PaperTrail is not monitoring for notices or claiming that a next action is open.</p>
+    {coverage?.length?<section className="mt-5 border border-[var(--pt-rule)] p-4"><h2 className="font-semibold">Registered source coverage</h2><ul className="mt-3 grid gap-3">{coverage.map(source=><li className="text-sm" key={source.id}><a className="break-all underline" href={source.source_url} target="_blank" rel="noreferrer">{source.source_url}</a><p>Checks {source.monitoring_enabled?"enabled":"paused"} · Last successful check: {source.last_success_at?formatDate(source.last_success_at):"not yet checked"}</p></li>)}</ul></section>:<p className="mt-5 text-sm text-[var(--slate)]">No registered source coverage is connected yet. You can connect a published program below.</p>}
     {activity.confirmation_state === "candidate" ? <ConfirmCandidateActivity activityId={activity.id} /> : <ActivityFollowupControls activityId={activity.id} trackingState={activity.tracking_state} />}
+    {activity.confirmation_state!=="candidate"&&activity.tracking_state!=="ended"?<ActivityNoticeScope activityId={activity.id} activityType={activity.activity_type} currentProgram={activity.program_id} currentScope={activity.scope_json??{}} programs={programs??[]} rules={rules??[]}/>:null}
     <section className="mt-10" aria-labelledby="activity-evidence-title">
       <h2 className="text-2xl font-bold" id="activity-evidence-title">Activity evidence</h2>
       <p className="mt-3 leading-7 text-[var(--slate)]">Evidence describes why this private record exists. It does not elevate a receipt into proof of approval, enrollment, issuance, or eligibility.</p>
@@ -60,7 +67,9 @@ export default async function ActivityDetailPage({ params }: { params: Promise<{
           <p className="font-semibold">{action.kind}</p>
           <p className="mt-1 text-sm text-[var(--slate)]">{action.state.replaceAll("_", " ")} · applicability {action.applicability_result}</p>
           <p className="mt-1 text-sm text-[var(--slate)]">Deadline: {action.deadline_text ?? formatDate(action.deadline_at)}</p>
-          {action.linked_application_id ? <a className="mt-3 inline-flex min-h-11 items-center font-semibold text-[var(--navy)] underline underline-offset-4" href={`/app/applications/${action.linked_application_id}`}>Open linked draft</a> : <PrepareFollowupApplication actionId={action.id} defaultTitle={`${activity.title} — ${action.kind}`} />}
+          {typeof action.cited_reason?.citation==="string"?<blockquote className="mt-3 border-l-2 border-[var(--pt-rule)] pl-3 text-sm">{action.cited_reason.citation}</blockquote>:null}
+          {Array.isArray(action.cited_reason?.missingScopeFields)&&action.cited_reason.missingScopeFields.length?<p className="mt-3 text-sm">Confirm these activity details above: {action.cited_reason.missingScopeFields.join(", ")}</p>:null}
+          {action.linked_application_id ? <a className="mt-3 inline-flex min-h-11 items-center font-semibold text-[var(--navy)] underline underline-offset-4" href={`/app/applications/${action.linked_application_id}`}>Open linked draft</a> : action.applicability_result!=="unknown"&&!['completed','dismissed','expired','not_applicable'].includes(action.state)?<PrepareFollowupApplication actionId={action.id} defaultTitle={`${activity.title} — ${action.kind}`} />:null}
           {!['completed', 'dismissed', 'expired', 'not_applicable'].includes(action.state) ? <ResolveFollowupAction actionId={action.id} /> : null}
         </li>)}
       </ul>

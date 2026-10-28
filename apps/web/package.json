@@ -15,6 +15,7 @@
     "tailwindcss": "4.3.3"
   },
   "dependencies": {
+    "@papertrail/ai": "workspace:*",
     "@next/env": "16.3.5",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.116.0",

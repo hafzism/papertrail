@@ -43,6 +43,7 @@ export function VaultUpload() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
+    const form = event.currentTarget;
     setError(null);
     if (file === null || !label.trim()) {
       setError("Choose a file and enter a document label.");
@@ -82,6 +83,8 @@ export function VaultUpload() {
 
     router.replace("/app/vault?uploaded=1");
     router.refresh();
+    form.reset();
+    setFile(null); setLabel(""); setDocumentType(""); setStatus("idle");
   }
 
   return (
