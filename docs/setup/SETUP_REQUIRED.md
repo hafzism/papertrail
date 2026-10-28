@@ -25,7 +25,7 @@ The linked Supabase project, Google sign-in, Storage, worker database access, lo
 ## Needed before the document-extraction worker smoke
 
 1. Complete the fresh Session Pooler `DATABASE_URL` step above.
-2. Set `WORKER_ENABLED_KINDS=extract_document` in the same uncommitted root `.env` file.
+2. Set `WORKER_ENABLED_KINDS=extract_document,propose_private_requirements` in the same uncommitted root `.env` file. Keep any other already-tested worker kinds in that comma-separated value.
 3. Start `pnpm --filter @papertrail/worker start` in a second terminal. It uses local `pdftotext`/`pdfinfo` for text PDFs and local Tesseract for scanned PDFs and JPEG/PNG/WebP images when configured. It writes full extracted text to private artifact storage and never invents extracted content.
 
 ## Local OCR for scanned PDFs and images
@@ -47,10 +47,11 @@ The Next.js code uses cookie-based Supabase SSR, Next 16’s `proxy.ts`, verifie
 
 ## Needed before provider smoke tests
 
-1. A dedicated OpenAI API project/key with the selected model access.
-2. Confirmation of available model IDs and current rate card; the app stays at a $5 campaign cap.
-3. A Telegram bot, HTTPS reachable origin, webhook secret, and bot username for W7.
-4. Google OAuth configured in Supabase for identity-only sign-in and the final allowed redirects.
+1. Push `202610280060_owner_ai_provider_credentials.sql` with `npx supabase@latest db push --linked`.
+2. Set a stable server-only `BYOK_ENCRYPTION_KEY`, then restart both the web app and worker.
+3. In **Workspace settings → Private AI provider**, save either an OpenAI or Gemini API key and its supported model ID. The key is encrypted and is never displayed again.
+4. In a draft application, save an unresolved owner-provided text description and explicitly request analysis. The worker must include `propose_private_requirements` in `WORKER_ENABLED_KINDS`.
+5. Repeat the same harmless analysis smoke with the other provider if both integrations need live proof. Existing workspace OpenAI configuration remains a fallback when no owner key is saved.
 
 ## Needed before public rehearsal
 
@@ -68,9 +69,9 @@ The current implemented endpoint accepts only secret-authenticated updates, dedu
 
 ## Needed before the implemented live-voice smoke
 
-1. Confirm your OpenAI project has access to a supported Realtime model, then set that exact model ID as `MODEL_LIVE` in the uncommitted root `.env`. Keep `OPENAI_API_KEY` server-only.
-2. Restart the web server. The **Live voice** panel appears inside an application only when both values are present.
-3. Use harmless demo data, allow the browser microphone prompt only after pressing **Start live voice**, speak briefly, and press **Stop voice**. The UI has a three-minute maximum and the standard API key never reaches the browser.
+1. Confirm the OpenAI project behind either the workspace server key or the owner's saved OpenAI key has access to a supported Realtime model. Set `MODEL_LIVE` to that exact model ID when the default is not suitable.
+2. Restart the web server. The **Live voice** panel appears inside an application when either a server-side OpenAI key or a saved OpenAI provider is available. A saved Gemini provider intentionally does not enable live voice.
+3. Use harmless demo data, allow the browser microphone prompt only after pressing **Start live voice**, speak briefly, and press **Stop voice**. The UI has a three-minute maximum and no standard API key reaches the browser.
 
 PaperTrail uses the server-side WebRTC-call endpoint described in the official [OpenAI Realtime API reference](https://platform.openai.com/docs/api-reference/realtime?lang=javascript). A real smoke must still confirm your project’s actual model entitlement and browser network permissions.
 
