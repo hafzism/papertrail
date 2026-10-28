@@ -7,6 +7,7 @@ export type {
   FinishableJobState,
   PrivateRequirementProposalResult,
   PrivateRequirementProposalSource,
+  OwnerAiProviderCredential,
   PrivatePacketManifestResult,
   PrivatePacketManifestSource,
   PrivateAcroFormDerivativeResult,

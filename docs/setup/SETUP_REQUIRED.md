@@ -11,6 +11,7 @@ The linked Supabase project, Google sign-in, Storage, worker database access, lo
 1. A Supabase project created for PaperTrail (Free tier is sufficient).
 2. Its project URL and publishable key placed locally in `.env` by you as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. The legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` is supported only for setup compatibility.
 3. Its service-role key and a fresh **Session Pooler** database URL from Supabase Connect placed locally in `.env` as `SUPABASE_SERVICE_ROLE_KEY` and `DATABASE_URL`, never pasted into this chat. Do not use the IPv6-only direct `db.<project-ref>.supabase.co:5432` address on this machine; the worker cannot reach it. The previously cached CLI pooler credential was rejected, so obtain a fresh URL from the dashboard rather than reusing a saved value.
+4. For owner-supplied OpenAI or Gemini keys saved in **Workspace settings**, add a long random `BYOK_ENCRYPTION_KEY` to `.env`. It encrypts owner keys before database storage and must remain stable; changing it makes existing saved keys unreadable until owners replace them. Local development can temporarily fall back to other server-only secrets, but a dedicated value is required before public deployment.
 
 ## Supabase Auth setup for the implemented sign-in path
 

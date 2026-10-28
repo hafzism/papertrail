@@ -79,6 +79,12 @@ export interface PrivateRequirementProposalResult {
   errorCode?: string;
 }
 
+export interface OwnerAiProviderCredential {
+  provider: "openai" | "gemini";
+  model: string;
+  key_ciphertext: string;
+}
+
 export interface PrivatePacketManifestSource {
   state: "ready" | "input_changed";
   input_version_vector: Record<string, unknown> | null;
@@ -240,6 +246,15 @@ export class WorkerRepository {
       [],
     );
     return rows[0]?.id ?? null;
+  }
+
+  /** Service-role-only database function; ciphertext never reaches a browser client. */
+  async ownerAiProviderCredential(ownerId: string): Promise<OwnerAiProviderCredential | null> {
+    const rows = await this.sql.unsafe<OwnerAiProviderCredential[]>(
+      "select * from public.get_owner_ai_provider_credential_for_service($1::uuid)",
+      [ownerId],
+    );
+    return rows[0] ?? null;
   }
 
   async beginPrivateRequirementProposal(job: ClaimedJob, proposalRunId: string, deletionGeneration: number): Promise<PrivateRequirementProposalSource | null> {

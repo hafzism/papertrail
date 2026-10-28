@@ -15,7 +15,7 @@ PaperTrail creates a private trail from source material to review. Users can upl
 ## Features
 
 - Private document vault with versioned uploads, text extraction, OCR routing, and review states for image-only documents.
-- Private source capture and OpenAI-assisted requirement proposals that remain proposed until the owner accepts them.
+- Private source capture and owner-selected OpenAI or Gemini requirement proposals that remain proposed until the owner accepts them.
 - Owner-confirmed reusable facts, application-specific overrides, evidence bindings, and review-only packet manifests/exports.
 - Tracked activities, follow-up actions, source-change monitoring, notifications, and private Telegram chat linking.
 - OpenAI Realtime voice-assisted review, with microphone access requested only when the user starts a session.
@@ -26,7 +26,7 @@ PaperTrail creates a private trail from source material to review. Users can upl
 - *Frontend:* Next.js 16, React 19, TypeScript, Tailwind CSS
 - *Backend:* Next.js route handlers, TypeScript worker processes, PostgreSQL functions
 - *Database:* Supabase Postgres, Row Level Security, Supabase Auth, Supabase Storage
-- *APIs / Services:* OpenAI Responses API, OpenAI Realtime API, Telegram Bot API, Google OAuth through Supabase
+- *APIs / Services:* OpenAI Responses API, OpenAI Realtime API, Gemini API, Telegram Bot API, Google OAuth through Supabase
 - *Hosting / Deployment:* Local development with Docker and optional HTTPS tunnelling; permanent demo deployment coming soon
 - *Other Tools:* pnpm workspaces, Playwright, Docker Compose, Xvfb, x11vnc/noVNC, Tesseract OCR, Poppler, Vitest
 
@@ -81,7 +81,7 @@ For the optional isolated local browser gateway:
 docker compose --env-file .env -f infra/browser-runner/docker-compose.yml up --build -d
 ```
 
-See [setup requirements](docs/setup/SETUP_REQUIRED.md) for the local environment values, OAuth configuration, worker capabilities, Telegram setup, browser gateway configuration, and OpenAI model setup. Never commit `.env` or paste secrets into issues, screenshots, or chat.
+See [setup requirements](docs/setup/SETUP_REQUIRED.md) for the local environment values, OAuth configuration, owner-supplied OpenAI/Gemini provider keys, worker capabilities, Telegram setup, browser gateway configuration, and OpenAI live-voice model setup. Never commit `.env` or paste secrets into issues, screenshots, or chat.
 
 ## Additional Notes
 

@@ -1,20 +1,27 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../../../src/lib/supabase/server";
+import { getOwnerAiProviderCredential } from "../../../../src/server/ai-provider-credentials";
 
 export const runtime = "nodejs";
 
 interface StartVoiceBody { applicationId?: unknown; sdp?: unknown; }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) return NextResponse.json({ error: "voice_not_configured" }, { status: 503 });
   let body: StartVoiceBody;
   try { body = await request.json() as StartVoiceBody; } catch { return NextResponse.json({ error: "invalid_json" }, { status: 400 }); }
   if (typeof body.applicationId !== "string" || !/^[0-9a-f-]{36}$/i.test(body.applicationId) || typeof body.sdp !== "string" || body.sdp.length < 1 || body.sdp.length > 100_000) return NextResponse.json({ error: "invalid_voice_offer" }, { status: 400 });
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   if (!claims) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const model = process.env.MODEL_LIVE?.trim() || "gpt-realtime";
+  const ownerId = claims.claims.sub;
+  if (typeof ownerId !== "string") return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  let savedCredential = null;
+  try { savedCredential = await getOwnerAiProviderCredential(ownerId); } catch { return NextResponse.json({ error: "voice_provider_unavailable" }, { status: 503 }); }
+  if (savedCredential !== null && savedCredential.provider !== "openai") return NextResponse.json({ error: "voice_requires_openai" }, { status: 409 });
+  const apiKey = savedCredential?.apiKey ?? process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) return NextResponse.json({ error: "voice_not_configured" }, { status: 503 });
+  // Text-analysis model selection is separate from the realtime model contract.
+  const model = process.env.MODEL_LIVE?.trim() ?? "gpt-realtime";
   const { data: sessionId, error: createError } = await supabase.rpc("create_voice_session", { p_application_id: body.applicationId, p_model_name: model });
   if (createError || typeof sessionId !== "string") return NextResponse.json({ error: "voice_session_not_created" }, { status: 403 });
 

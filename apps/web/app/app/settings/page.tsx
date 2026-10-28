@@ -5,6 +5,7 @@ import { createClient } from "../../../src/lib/supabase/server";
 import { LanguagePreferenceForm } from "./language-preference-form";
 import { PrivateDataExport } from "./private-data-export";
 import { TelegramLinkControls } from "./telegram-link-controls";
+import { AiProviderSettings, type AiProviderStatus } from "./ai-provider-settings";
 
 export default async function SettingsPage() {
   if (getPublicSupabaseConfig() === null) redirect("/login");
@@ -16,7 +17,7 @@ export default async function SettingsPage() {
     .select("language")
     .maybeSingle();
   const currentLanguage = profile?.language === "ml" ? "ml" : "en";
-  const [{ data: applications }, { data: documents }, { data: activities }, { data: notifications }, { data: telegramLink }, { data: telegramIntents }, { data: telegramMessages }] = await Promise.all([
+  const [{ data: applications }, { data: documents }, { data: activities }, { data: notifications }, { data: telegramLink }, { data: telegramIntents }, { data: telegramMessages }, { data: aiProviderRows }] = await Promise.all([
     supabase.from("applications").select("id, title, lifecycle_state, readiness_state, created_at"),
     supabase.from("documents").select("id, label, document_type, created_at").is("deleted_at", null),
     supabase.from("tracked_activities").select("id, activity_type, title, confirmation_state, tracking_state, created_at"),
@@ -24,7 +25,12 @@ export default async function SettingsPage() {
     supabase.from("telegram_channel_links").select("telegram_username, unlinked_at").maybeSingle(),
     supabase.from("telegram_link_intents").select("id, state, expires_at, telegram_username").in("state", ["pending", "awaiting_owner_confirmation"]).order("created_at", { ascending: false }).limit(1),
     supabase.from("telegram_inbound_messages").select("id, body, received_at").order("received_at", { ascending: false }).limit(10),
+    supabase.rpc("owner_ai_provider_credential_status"),
   ]);
+  const rawAiProvider = Array.isArray(aiProviderRows) ? aiProviderRows[0] : null;
+  const aiProvider: AiProviderStatus | null = rawAiProvider && (rawAiProvider.provider === "openai" || rawAiProvider.provider === "gemini") && typeof rawAiProvider.model === "string" && typeof rawAiProvider.updated_at === "string"
+    ? { provider: rawAiProvider.provider, model: rawAiProvider.model, updatedAt: rawAiProvider.updated_at }
+    : null;
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl px-5 py-10 sm:px-8">
@@ -43,6 +49,8 @@ export default async function SettingsPage() {
         <TelegramLinkControls botUsername={process.env.TELEGRAM_BOT_USERNAME?.trim() || null} link={telegramLink ?? null} pendingIntent={telegramIntents?.[0] ?? null} />
         {telegramMessages?.length ? <div className="mt-6"><h3 className="font-bold">Recent private Telegram text</h3><p className="mt-2 text-sm leading-6 text-[var(--slate)]">Messages are recorded privately but do not choose an application, confirm facts, or approve work.</p><ul className="mt-3 grid gap-3">{telegramMessages.map((message) => <li className="rounded-lg border border-[var(--border)] bg-white p-4" key={message.id}><p className="whitespace-pre-wrap text-sm leading-6">{message.body}</p><p className="mt-2 text-xs text-[var(--slate)]">{new Date(message.received_at).toLocaleString()}</p></li>)}</ul></div> : null}
       </section>
+
+      <AiProviderSettings current={aiProvider} />
 
       <section className="mt-10" aria-labelledby="private-data-title">
         <h2 id="private-data-title" className="text-2xl font-bold">Private data controls</h2>

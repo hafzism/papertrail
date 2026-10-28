@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ClaimedJob } from "@papertrail/db";
+import { encryptApiKey } from "../src/ai-credential-vault.js";
 import { ProposeRequirementsHandler, type RequirementProposalConfig } from "../src/propose-requirements.js";
 
 const job: ClaimedJob = {
@@ -25,6 +26,7 @@ function repository() {
   return {
     beginPrivateRequirementProposal: vi.fn().mockResolvedValue({ source_text: sourceText, source_content_sha256: "a".repeat(64), prompt_version: "requirement-proposal-v1" }),
     activeBudgetCampaignId: vi.fn().mockResolvedValue("00000000-0000-4000-8000-000000000022"),
+    ownerAiProviderCredential: vi.fn().mockResolvedValue(null),
     recordPrivateRequirementProposal: vi.fn().mockResolvedValue(true),
   };
 }
@@ -93,5 +95,19 @@ describe("ProposeRequirementsHandler", () => {
 
     await expect(handler.handle(job)).resolves.toEqual({ state: "failed", errorCode: "REQUIREMENT_PROPOSAL_CITATION_NOT_IN_SOURCE" });
     expect(db.recordPrivateRequirementProposal).toHaveBeenCalledWith(expect.objectContaining({ state: "failed", responseId: "resp_124", candidates: [] }));
+  });
+
+  it("uses a saved owner Gemini key without consuming the workspace budget", async () => {
+    const db = repository();
+    const encryptionSecret = "server encryption secret with enough entropy";
+    db.ownerAiProviderCredential = vi.fn().mockResolvedValue({ provider: "gemini", model: "gemini-2.5-flash", key_ciphertext: encryptApiKey("owner-gemini-key-not-logged", encryptionSecret) });
+    const byokRunner = { run: vi.fn().mockResolvedValue({ id: "gemini-1", outputText: JSON.stringify([{
+      logicalKey: "application.photograph", kind: "document", label: "Upload a passport-size photograph.", citationExcerpt: "Applicants must upload a passport-size photograph", ambiguityFlags: [],
+    }]) }) };
+    // The vault itself is independently tested; this test pins the owner-key routing boundary.
+    const handler = new ProposeRequirementsHandler(db as never, config, { run: vi.fn() }, async () => 0, () => "request-123", encryptionSecret, "Return JSON only.", byokRunner);
+    await expect(handler.handle(job)).resolves.toEqual({ state: "succeeded" });
+    expect(db.activeBudgetCampaignId).not.toHaveBeenCalled();
+    expect(byokRunner.run).toHaveBeenCalledWith(expect.objectContaining({ provider: "gemini" }), expect.any(String), expect.any(Object));
   });
 });

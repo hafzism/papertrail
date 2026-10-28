@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   MeteredResponsesRunner,
+  GeminiGenerateContentTransport,
   OpenAIResponsesTransport,
   type BudgetGateway,
   type MeteredRequest,
@@ -10,7 +11,8 @@ import {
   type ModelRate,
   type ResponsesTransport,
 } from "@papertrail/ai";
-import type { ClaimedJob, WorkerRepository } from "@papertrail/db";
+import { decryptApiKey, resolveAiCredentialEncryptionSecret } from "./ai-credential-vault.js";
+import type { ClaimedJob, OwnerAiProviderCredential, PrivateRequirementProposalSource, WorkerRepository } from "@papertrail/db";
 import { parseRequirementProposals } from "@papertrail/domain";
 import type { JobHandler } from "./durable-worker.js";
 
@@ -38,6 +40,10 @@ export interface RequirementProposalConfig {
 
 export interface RequirementProposalRunner {
   run(request: MeteredRequest): Promise<MeteredRunResult>;
+}
+
+export interface OwnerSuppliedProviderRunner {
+  run(credential: OwnerAiProviderCredential, apiKey: string, request: { input: string; instructions: string; maxOutputTokens: number; requestId: string; runId: string }): Promise<{ id: string; outputText: string }>;
 }
 
 export type InputTokenCounter = (apiKey: string, model: string, instructions: string, input: string) => Promise<number>;
@@ -103,10 +109,33 @@ export class ProposeRequirementsHandler implements JobHandler {
 
   constructor(
     private readonly repository: WorkerRepository,
-    private readonly config: RequirementProposalConfig,
-    private readonly runner: RequirementProposalRunner,
+    private readonly config: RequirementProposalConfig | null,
+    private readonly runner: RequirementProposalRunner | null,
     private readonly countInputTokens: InputTokenCounter = countOpenAIInputTokens,
     private readonly newRequestId: () => string = randomUUID,
+    private readonly byokSecret: string | null = null,
+    private readonly byokPrompt = "Return only a JSON array of private requirement proposals, each cited exactly from the supplied source text.",
+    private readonly byokRunner: OwnerSuppliedProviderRunner = {
+      async run(credential, apiKey, request) {
+        if (credential.provider === "openai") {
+          const response = await new OpenAIResponsesTransport(apiKey).create({
+            model: credential.model,
+            input: request.input,
+            instructions: request.instructions,
+            maxOutputTokens: request.maxOutputTokens,
+            metadata: { papertrail_request_id: request.requestId, papertrail_run_id: request.runId },
+          });
+          return { id: response.id, outputText: response.outputText };
+        }
+        return new GeminiGenerateContentTransport(apiKey).create({
+          model: credential.model,
+          input: request.input,
+          instructions: request.instructions,
+          maxOutputTokens: request.maxOutputTokens,
+          metadata: { papertrail_request_id: request.requestId, papertrail_run_id: request.runId },
+        });
+      },
+    },
   ) {}
 
   async handle(job: ClaimedJob): Promise<{ state: "succeeded" | "failed" | "budget_paused" | "outcome_unknown"; errorCode?: string }> {
@@ -117,7 +146,15 @@ export class ProposeRequirementsHandler implements JobHandler {
     if (source === null) return { state: "outcome_unknown", errorCode: "REQUIREMENT_PROPOSAL_FENCE_REJECTED" };
     if (!sourceHashPattern.test(source.source_content_sha256)) return this.recordFailure(job, payload, "REQUIREMENT_PROPOSAL_SOURCE_HASH_INVALID");
     if (!source.source_text.trim()) return this.recordFailure(job, payload, "REQUIREMENT_PROPOSAL_SOURCE_EMPTY");
-    if (source.prompt_version !== this.config.promptVersion) return this.recordFailure(job, payload, "REQUIREMENT_PROPOSAL_PROMPT_VERSION_UNSUPPORTED");
+    const expectedPromptVersion = this.config?.promptVersion ?? promptVersion;
+    if (source.prompt_version !== expectedPromptVersion) return this.recordFailure(job, payload, "REQUIREMENT_PROPOSAL_PROMPT_VERSION_UNSUPPORTED");
+
+    const requestId = this.newRequestId();
+    const input = buildSourceInput(source.source_text, source.source_content_sha256);
+    const credential = await this.repository.ownerAiProviderCredential(job.owner_id);
+    if (credential !== null) return this.handleOwnerSuppliedCredential(job, payload, source, credential, input, requestId);
+    if (this.config === null || this.runner === null) return this.recordFailure(job, payload, "AI_PROVIDER_NOT_CONFIGURED");
+
     let campaignId: string;
     try {
       campaignId = await this.requireCampaignId();
@@ -126,7 +163,6 @@ export class ProposeRequirementsHandler implements JobHandler {
       return this.recordFailure(job, payload, code, isBudgetError(code) ? "budget_paused" : "failed");
     }
 
-    const input = buildSourceInput(source.source_text, source.source_content_sha256);
     let countedInputTokens: number;
     try {
       countedInputTokens = await this.countInputTokens(this.config.apiKey, this.config.model, this.config.prompt, input);
@@ -145,7 +181,7 @@ export class ProposeRequirementsHandler implements JobHandler {
         category: "model_inference",
         ownerId: job.owner_id,
         runId: payload.proposalRunId,
-        requestId: this.newRequestId(),
+        requestId,
         model: this.config.model,
         instructions: this.config.prompt,
         input,
@@ -176,6 +212,48 @@ export class ProposeRequirementsHandler implements JobHandler {
       state: "completed",
       model: this.config.model,
       responseId: metered.responseId,
+      candidates,
+    });
+    return recorded ? { state: "succeeded" } : { state: "outcome_unknown", errorCode: "REQUIREMENT_PROPOSAL_FENCE_REJECTED" };
+  }
+
+  private async handleOwnerSuppliedCredential(
+    job: ClaimedJob,
+    payload: RequirementProposalPayload,
+    source: PrivateRequirementProposalSource,
+    credential: OwnerAiProviderCredential,
+    input: string,
+    requestId: string,
+  ): Promise<{ state: "succeeded" | "failed" | "budget_paused" | "outcome_unknown"; errorCode?: string }> {
+    if (this.byokSecret === null) return this.recordFailure(job, payload, "AI_CREDENTIAL_STORAGE_NOT_CONFIGURED");
+    let response: { id: string; outputText: string };
+    try {
+      const apiKey = decryptApiKey(credential.key_ciphertext, this.byokSecret);
+      response = await this.byokRunner.run(credential, apiKey, {
+        input,
+        instructions: this.byokPrompt,
+        maxOutputTokens: maximumOutputTokens,
+        requestId,
+        runId: payload.proposalRunId,
+      });
+    } catch (error) {
+      return this.recordFailure(job, payload, errorCode(error), "failed", `${credential.provider}/${credential.model}`);
+    }
+    let candidates;
+    try {
+      candidates = parseRequirementProposals(response.outputText, source.source_text);
+    } catch (error) {
+      return this.recordFailure(job, payload, errorCode(error), "failed", `${credential.provider}/${credential.model}`, response.id);
+    }
+    const recorded = await this.repository.recordPrivateRequirementProposal({
+      jobId: job.id,
+      fencingToken: job.fencing_token,
+      ownerId: job.owner_id!,
+      proposalRunId: payload.proposalRunId,
+      deletionGeneration: payload.deletionGeneration,
+      state: "completed",
+      model: `${credential.provider}/${credential.model}`,
+      responseId: response.id,
       candidates,
     });
     return recorded ? { state: "succeeded" } : { state: "outcome_unknown", errorCode: "REQUIREMENT_PROPOSAL_FENCE_REJECTED" };
@@ -214,17 +292,21 @@ export class ProposeRequirementsHandler implements JobHandler {
 /** Builds the live, metered handler only when its explicitly enabled job kind is configured. */
 export async function createProposeRequirementsHandler(repository: WorkerRepository, budgets: BudgetGateway): Promise<ProposeRequirementsHandler> {
   const root = resolve(import.meta.dirname, "../../..");
-  const apiKey = requiredEnvironment("OPENAI_API_KEY");
-  const model = requiredEnvironment("MODEL_SMALL");
-  const ratePath = requiredEnvironment("RATE_CARD_PATH");
-  const [prompt, rateCardContents] = await Promise.all([
-    readFile(resolve(root, "prompts/requirement-extraction-v1.md"), "utf8"),
-    readFile(resolve(root, ratePath), "utf8"),
-  ]);
+  const prompt = await readFile(resolve(root, "prompts/requirement-extraction-v1.md"), "utf8");
   if (!prompt.trim()) throw new Error("REQUIREMENT_PROPOSAL_PROMPT_EMPTY");
-  const rateCard = JSON.parse(rateCardContents) as RateCard;
-  const definition = rateCard.models[model];
-  if (!definition) throw new Error(`RATE_CARD_MODEL_NOT_FOUND:${model}`);
-  const config: RequirementProposalConfig = { apiKey, model, prompt, promptVersion, rate: parseRate(definition) };
-  return new ProposeRequirementsHandler(repository, config, new MeteredResponsesRunner(budgets, new OpenAIResponsesTransport(apiKey)));
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  const model = process.env.MODEL_SMALL?.trim();
+  const ratePath = process.env.RATE_CARD_PATH?.trim();
+  let config: RequirementProposalConfig | null = null;
+  let runner: RequirementProposalRunner | null = null;
+  if (apiKey && model && ratePath) {
+    const rateCard = JSON.parse(await readFile(resolve(root, ratePath), "utf8")) as RateCard;
+    const definition = rateCard.models[model];
+    if (!definition) throw new Error(`RATE_CARD_MODEL_NOT_FOUND:${model}`);
+    config = { apiKey, model, prompt, promptVersion, rate: parseRate(definition) };
+    runner = new MeteredResponsesRunner(budgets, new OpenAIResponsesTransport(apiKey));
+  }
+  let byokSecret: string | null = null;
+  try { byokSecret = resolveAiCredentialEncryptionSecret(); } catch { /* credential use reports a durable per-job error */ }
+  return new ProposeRequirementsHandler(repository, config, runner, countOpenAIInputTokens, randomUUID, byokSecret, prompt);
 }
